@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neighborhood Vibe Explorer</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #f7f7fa;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            background: #fff;
+            margin-top: 60px;
+            padding: 32px 28px 24px 28px;
+            border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+            max-width: 420px;
+            width: 100%;
+        }
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 18px;
+            color: #2d3748;
+            text-align: center;
+        }
+        label {
+            font-weight: 500;
+            color: #4a5568;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px 12px;
+            margin: 10px 0 18px 0;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+        button {
+            background: #4f8cff;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 20px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        .result {
+            margin-top: 28px;
+            padding: 18px 14px;
+            background: #f1f5fb;
+            border-radius: 10px;
+            color: #222;
+        }
+        .stat {
+            margin: 6px 0;
+            font-size: 1.05rem;
+        }
+        .summary {
+            margin-top: 14px;
+            font-style: italic;
+            color: #374151;
+        }
+        .loading {
+            color: #4f8cff;
+            margin-top: 18px;
+            text-align: center;
+        }
+        @media (max-width: 500px) {
+            .container { margin-top: 20px; padding: 18px 6px; }
+            h1 { font-size: 1.3rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Neighborhood Vibe Explorer</h1>
+        <form id="vibeForm">
+            <label for="neighborhood">Enter a neighborhood or district:</label>
+            <input type="text" id="neighborhood" name="neighborhood" required placeholder="e.g. Mission District, Soho, Shibuya">
+            <button type="submit">Get Vibe</button>
+        </form>
+        <div id="loading" class="loading" style="display:none;">Analyzing vibe...</div>
+        <div id="result" class="result" style="display:none;"></div>
+    </div>
+    <script>
+        const form = document.getElementById('vibeForm');
+        const resultDiv = document.getElementById('result');
+        const loadingDiv = document.getElementById('loading');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const neighborhood = document.getElementById('neighborhood').value.trim();
+            if (!neighborhood) return;
+            resultDiv.style.display = 'none';
+            loadingDiv.style.display = 'block';
+            resultDiv.innerHTML = '';
+            try {
+                const response = await fetch('/api/neighborhood_summary', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_input: neighborhood })
+                });
+                if (!response.ok) throw new Error('API error');
+                const data = await response.json();
+                resultDiv.innerHTML = `
+                    <div class="stat"><b>📍 ${data.display_name}</b></div>
+                    <div class="stat">⭐ Average Rating: <b>${data.avg_rating.toFixed(2)}</b> (${data.avg_review_count} reviews)</div>
+                    <div class="stat">🔥 Popularity Score: <b>${data.avg_popularity.toFixed(2)}</b></div>
+                    <div class="stat">😊 Sentiment Score: <b>${data.avg_sentiment_score.toFixed(2)}</b></div>
+                    <div class="summary">🧠 <b>Sense of Place:</b><br>${data.summaries}</div>
+                `;
+            } catch (err) {
+                resultDiv.innerHTML = '<span style="color:#e53e3e;">Failed to fetch summary. Please try again.</span>';
+            } finally {
+                loadingDiv.style.display = 'none';
+                resultDiv.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>
+    

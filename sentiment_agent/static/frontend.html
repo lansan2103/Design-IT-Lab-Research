@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Urban Sentiment Explorer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f8f9fa;
+      margin: 0;
+      padding: 2rem;
+      color: #1f2937;
+      display: flex;
+      justify-content: center;
+    }
+
+    .main-container {
+      display: flex;
+      flex-direction: row;
+      gap: 2rem;
+      width: 100%;
+      max-width: 1200px;
+    }
+
+    .ui-panel {
+      flex: 1;
+      max-width: 500px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h1 {
+      font-size: 2rem;
+      font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 2rem;
+      text-align: center;
+    }
+
+    input, button {
+      font-size: 1rem;
+      padding: 0.75rem 1rem;
+      margin-top: 1rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #334155;
+    }
+
+    button {
+      background-color: #334155;
+      color: #fff;
+      font-weight: 500;
+      transition: background-color 0.3s ease;
+    }
+
+    button:hover {
+      background-color: #1e293b;
+    }
+
+    .output {
+      margin-top: 2rem;
+      background-color: #ffffff;
+      padding: 1.5rem 2rem;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      width: 100%;
+      border: 1px solid #e2e8f0;
+      display: none;
+    }
+
+    .output p {
+      margin: 0.4rem 0;
+    }
+
+    .summary {
+      margin-top: 1rem;
+      font-size: 0.95rem;
+      color: #374151;
+    }
+
+    .loader {
+      border: 5px solid #e5e7eb;
+      border-top: 5px solid #334155;
+      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      animation: spin 1s linear infinite;
+      margin: 30px auto;
+      display: none;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    #google-map-window {
+      flex: 1;
+      height: 600px;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      border: 1px solid #e5e7eb;
+      background-color: #fff;
+      margin-top: 3rem;
+    }
+
+    #google-map {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Read More styles */
+    #summaryText.collapsed {
+      max-height: 3.6em;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .read-more-btn {
+      margin-top: 0.5rem;
+      background: none;
+      border: none;
+      color: #334155;
+      cursor: pointer;
+      font-weight: 500;
+      font-size: 0.9rem;
+      padding: 0;
+    }
+
+    .read-more-btn:hover {
+      text-decoration: underline;
+    }
+
+    @media screen and (max-width: 900px) {
+      .main-container {
+        flex-direction: column;
+      }
+
+      #google-map-window {
+        margin-top: 2rem;
+        height: 400px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="main-container">
+    <!-- UI Panel -->
+    <div class="ui-panel">
+      <h1>Urban Sentiment Explorer</h1>
+      <input type="text" id="inputField" placeholder="Where would you like to explore?" />
+      <button onclick="analyze()">Analyze Urban Sentiment</button>
+
+      <div id="loader" class="loader"></div>
+
+      <div id="result" class="output">
+        <p><strong>Neighborhood:</strong> <span id="name"></span></p>
+        <p><strong>Avg Rating:</strong> <span id="rating"></span></p>
+        <p><strong>Popularity Score:</strong> <span id="popularity"></span></p>
+        <p><strong>Sentiment Score:</strong> <span id="sentiment"></span></p>
+        <div class="summary">
+          <p><strong>Sense of Place:</strong></p>
+          <p id="summaryText" class="collapsed"></p>
+          <button id="toggleSummary" class="read-more-btn" onclick="toggleSummary()">Read More</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Map Panel -->
+    <div id="google-map-window">
+      <div id="google-map"></div>
+    </div>
+  </div>
+
+  <!-- Mapbox + Deck.gl -->
+  <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
+  <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+  <script src="https://unpkg.com/deck.gl@8.9.34/dist.min.js"></script>
+  <script src="https://unpkg.com/@deck.gl/google-maps@8.9.34/dist.min.js"></script>
+
+  <!-- Google Maps JS API -->
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD-xIT-oMr8c-TJtnCFGCV-AuzIGBDWHgE"></script>
+
+  <script>
+    let googleMap;
+    let googleOverlay;
+
+    async function analyze() {
+      const input = document.getElementById("inputField").value.trim();
+      const resultDiv = document.getElementById("result");
+      const loader = document.getElementById("loader");
+
+      resultDiv.style.display = "none";
+      loader.style.display = "block";
+
+      try {
+        const response = await fetch("/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_input: input })
+        });
+
+        const data = await response.json();
+
+        document.getElementById("name").textContent = data.display_name || "N/A";
+        document.getElementById("rating").textContent = (data.avg_rating || 0).toFixed(2) + ` (${data.avg_review_count} reviews)`;
+        document.getElementById("popularity").textContent = (data.avg_popularity || 0).toFixed(2);
+        document.getElementById("sentiment").textContent = (data.avg_sentiment_score || 0).toFixed(2);
+        document.getElementById("summaryText").textContent = data.summaries || "No summary available.";
+        document.getElementById("summaryText").classList.add("collapsed");
+        document.getElementById("toggleSummary").textContent = "Read More";
+
+        resultDiv.style.display = "block";
+
+        if (data.places && Array.isArray(data.places) && data.places.length > 0) {
+          renderGoogleHeatmap(data.places);
+        }
+      } catch (err) {
+        alert("An error occurred. Please try again later.");
+      } finally {
+        loader.style.display = "none";
+      }
+    }
+
+    function renderGoogleHeatmap(places) {
+      const heatmapData = places.map(p => ({
+        coordinates: [p.location.longitude, p.location.latitude],
+        weight: p.sentiment_score || 0.5
+      }));
+
+      const center = heatmapData.length
+        ? { lat: heatmapData[0].coordinates[1], lng: heatmapData[0].coordinates[0] }
+        : { lat: 37.7749, lng: -122.4194 };
+
+      if (!googleMap) {
+        googleMap = new google.maps.Map(document.getElementById('google-map'), {
+          center: center,
+          zoom: 13,
+          mapTypeId: 'roadmap',
+          streetViewControl: false,
+          fullscreenControl: false
+        });
+      } else {
+        googleMap.setCenter(center);
+      }
+
+      if (googleOverlay) {
+        googleOverlay.setMap(null);
+      }
+
+      const heatmapLayer = new deck.HeatmapLayer({
+        id: 'sentiment-heatmap',
+        data: heatmapData,
+        getPosition: d => d.coordinates,
+        getWeight: d => d.weight,
+        radiusPixels: 40,
+        aggregation: 'SUM',
+        intensity: 1,
+        threshold: 0.03
+      });
+
+      googleOverlay = new deck.GoogleMapsOverlay({ layers: [heatmapLayer] });
+      googleOverlay.setMap(googleMap);
+    }
+
+    function toggleSummary() {
+      const summary = document.getElementById("summaryText");
+      const btn = document.getElementById("toggleSummary");
+      const isCollapsed = summary.classList.contains("collapsed");
+
+      if (isCollapsed) {
+        summary.classList.remove("collapsed");
+        summary.style.whiteSpace = "normal";
+        btn.textContent = "Read Less";
+      } else {
+        summary.classList.add("collapsed");
+        summary.style.whiteSpace = "nowrap";
+        btn.textContent = "Read More";
+      }
+    }
+  </script>
+</body>
+</html>
